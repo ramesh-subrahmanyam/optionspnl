@@ -632,7 +632,7 @@ def summarize_options_data(df, frequency='weekly'):
     df['Expiration'] = pd.to_datetime(df['Expiration'], format='%m/%d/%Y')
     # Convert Quantity and Price to numeric values
     df['Quantity'] = -pd.to_numeric(df['Quantity'])
-    df['Price'] = pd.to_numeric(df['Price'].replace('[\$,]', '', regex=True))
+    df['Price'] = pd.to_numeric(df['Price'].replace('[$,]', '', regex=True))
 
     # Calculate option premium collected
     df['Premium Collected'] = df['Quantity'] * df['Price'] * 100
