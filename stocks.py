@@ -22,7 +22,7 @@ class StockTrades:
             self.df = all_data[mask].copy()
             self.df.loc[:, 'qty'] = self.df.apply(lambda row: row['Quantity'] if row['Action'] == 'Buy' else -row['Quantity'], axis=1)
             self.df.columns = self.df.columns.str.lower()
-            self.df.loc[:, 'amount'] = self.df['amount'].replace('[\$,]', '', regex=True).astype(float)
+            self.df.loc[:, 'amount'] = self.df['amount'].replace('[$,]', '', regex=True).astype(float)
 
             self.df = self.df[['date', 'qty', 'amount']].reset_index().copy()
         except Exception as e:
