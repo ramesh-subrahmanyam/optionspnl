@@ -47,12 +47,12 @@ class StockTrades:
         out=[]
         ixs, _=self.find_indices(current_pos)
         for i in ixs:
-            # print(self.df.date.iloc[i], i, 
+            # print(self.df.date.iloc[i], self.df.date.iloc[0], i, 
             #             self.df.qty.iloc[:i+1].sum(),
             #             self.df.amount.iloc[:i+1].sum()+current_pos*current_price)
             out.append((self.df.date.iloc[i], 
                         self.df.amount.iloc[:i+1].sum()+current_pos*current_price))  
-        return dict(out)
+        return dict(out), self.df.date.iloc[0]
     
     
 
