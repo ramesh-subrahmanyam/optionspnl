@@ -19,7 +19,7 @@ def option_counts_by_date(dct):
                 puts +=1
         out.append((dt, calls, puts))
     df=pd.DataFrame(out, columns=["exp_date", "calls", "puts"]).set_index("exp_date")
-   return df.sort_index()
+    return df.sort_index()
     
 
 def get_stock_closing_prices(symbol, dates):
