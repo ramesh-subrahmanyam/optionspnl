@@ -14,19 +14,20 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 
 ### Architecture Layers
 
-- **Data Layer**: CSV file reading, parsing, and data cleaning ([positionslib.py](positionslib.py), [positions_data.py](positions_data.py))
-- **Business Logic Layer**: PnL calculation, exposure analysis, options pairing ([pnllib.py](pnllib.py), [exposure_analysis.py](exposure_analysis.py))
-- **Data Access Layer**: Yahoo Finance integration, stock price fetching ([stocks.py](stocks.py), [stock_cache.py](stock_cache.py))
-- **Utility Layer**: Helper functions, data transformation ([utils.py](utils.py))
-- **Presentation Layer**: Jupyter notebooks for interactive analysis
+- **Data Layer**: CSV file reading, parsing, and data cleaning ([libs/positionslib.py](libs/positionslib.py), [libs/positions_data.py](libs/positions_data.py))
+- **Business Logic Layer**: PnL calculation, exposure analysis, options pairing ([libs/pnllib.py](libs/pnllib.py), [tools/exposure_analysis.py](tools/exposure_analysis.py))
+- **Data Access Layer**: Yahoo Finance integration, stock price fetching ([libs/stocks.py](libs/stocks.py), [libs/stock_cache.py](libs/stock_cache.py), [libs/historical_cache.py](libs/historical_cache.py))
+- **Utility Layer**: Helper functions, data transformation ([libs/utils.py](libs/utils.py))
+- **Tools Layer**: Executable scripts and analysis tools ([tools/screener.py](tools/screener.py), [tools/exposure_analysis.py](tools/exposure_analysis.py), [tools/manage_earnings_database.py](tools/manage_earnings_database.py))
+- **Presentation Layer**: Jupyter notebooks for interactive analysis ([notebooks/](notebooks/))
 
 ---
 
 ## File Descriptions
 
-### Core Library Files
+### Core Library Files (libs/)
 
-#### [pnllib.py](pnllib.py)
+#### [libs/pnllib.py](libs/pnllib.py)
 **Primary Functionality**: Options trade matching and profit/loss calculation engine
 
 **Role in Project**: The core module for analyzing historical options trades. It handles the complex logic of pairing opening and closing trades, calculating realized PnL, and managing assignments/expirations.
@@ -42,11 +43,11 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 - `compute_trade_stats()`: Generates summary statistics (win rate, average win/loss, etc.)
 - Logging system with multiple verbosity levels (INFO, WARN, ERROR, SILENT)
 
-**Dependencies**: pandas, numpy, datetime, yfinance, utils.py
+**Dependencies**: pandas, numpy, datetime, yfinance, libs.utils
 
 ---
 
-#### [positionslib.py](positionslib.py)
+#### [libs/positionslib.py](libs/positionslib.py)
 **Primary Functionality**: Broker position file parsing and preprocessing
 
 **Role in Project**: Handles reading and cleaning position data exported from brokerage accounts. Transforms raw CSV files into structured DataFrames.
@@ -58,11 +59,11 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 - `get_margin()`: Extracts margin requirement from string format
 - Handles numeric conversions, N/A values, and data type cleanup
 
-**Dependencies**: pandas, pnllib
+**Dependencies**: pandas, libs.pnllib, libs.utils
 
 ---
 
-#### [positions_data.py](positions_data.py)
+#### [libs/positions_data.py](libs/positions_data.py)
 **Primary Functionality**: Object-oriented interface for positions data with stock/options separation
 
 **Role in Project**: Provides a cleaner, more maintainable API for working with positions data. Separates stock positions from options positions and integrates with stock cache.
@@ -74,28 +75,31 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 - `_parse_option_symbols()`: Extracts ticker, strike, expiration, and type from option symbols
 - Integration with `StockCache` for real-time price and volatility updates
 
-**Dependencies**: pandas, numpy, re, datetime, stock_cache
+**Dependencies**: pandas, numpy, re, datetime, libs.stock_cache, libs.utils
 
 ---
 
-#### [stocks.py](stocks.py)
-**Primary Functionality**: Earnings date management and stock screening
+#### [libs/stocks.py](libs/stocks.py)
+**Primary Functionality**: Individual stock position tracking and PnL analysis
 
-**Role in Project**: Manages earnings calendar data to identify stocks suitable for options trading based on earnings date proximity.
+**Role in Project**: Tracks trading history for specific stocks to calculate realized and unrealized PnL across different time periods. Used for deep-dive analysis of individual stock performance.
 
 **Key Components**:
-- `get_earnings_dates()`: Fetches earnings dates from Finnhub API
-- `store_symbols()`: Persists earnings data to monthly CSV files (M1.csv - M12.csv)
-- `get_stocks_outside_date()`: Finds stocks without earnings in a specified date range
-- `get_stocks_within_days()`: Finds stocks with earnings within N days
-- `StockData` class: Manages stock price data and calculates returns over various periods
-- `attach_earnings_dates()`: Merges earnings dates with stock data
+- `StockTrades` class: Main interface for tracking all trades for a single stock
+- `read_data()`: Loads trades from CSV with date filtering, excludes "as of" entries
+- `infer_positions()`: Reconstructs position size at each historical point in time
+- `infer_pnl()`: Calculates PnL from any historical point to present, accounting for future cash flows
+- `find_pnl_from_zero_pos_after_start_date()`: Identifies round-trip trades (open to close to zero position)
+- `find_pnl_from_start_date()`: Finds PnL from earliest transaction after specified start date
+- `compute_forward_pnl()`: Generates time-series of PnL evolution over time
 
-**Dependencies**: pandas, datetime, yfinance, logging
+**Use Case**: Detailed analysis of trading performance for specific stocks, position reconstruction, and entry/exit analysis
+
+**Dependencies**: pandas, libs.historical_cache
 
 ---
 
-#### [stock_cache.py](stock_cache.py)
+#### [libs/stock_cache.py](libs/stock_cache.py)
 **Primary Functionality**: Persistent caching of stock market data
 
 **Role in Project**: Reduces API calls to Yahoo Finance by maintaining a JSON-based cache of stock prices, volatility, volume, and market cap data.
@@ -112,7 +116,7 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 
 ---
 
-#### [historical_cache.py](historical_cache.py)
+#### [libs/historical_cache.py](libs/historical_cache.py)
 **Primary Functionality**: High-performance caching of historical stock price data
 
 **Role in Project**: Provides ~5000x faster access to historical price data compared to direct API calls. Designed for stock screening and backtesting workflows. Each stock's data is stored in a separate JSON file for efficient lazy updates.
@@ -143,29 +147,7 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 
 ---
 
-#### [exposure_analysis.py](exposure_analysis.py)
-**Primary Functionality**: Options portfolio risk analysis using Greeks
-
-**Role in Project**: Calculates portfolio delta exposure by computing option deltas using the Black-Scholes model. Helps traders understand their directional risk.
-
-**Key Components**:
-- `ExposureAnalysis` class: Main analysis engine
-- `_get_historical_volatility()`: Calculates annualized volatility with outlier capping
-- `_get_option_delta()`: Computes delta using Black-Scholes Greeks (py_vollib library)
-- `analyze_positions()`: Processes entire portfolio and adds delta columns
-- `get_total_exposure()`: Aggregates exposure by underlying ticker
-- Volatility premium adjustment (configurable multiplier)
-- Integration with stock cache for efficient data retrieval
-
-**Dependencies**: pandas, numpy, yfinance, datetime, positions_data, py_vollib, stock_cache
-
-**Constants**:
-- `VOLATILITY_PREMIUM`: 50% (multiplies historical vol by 1.5)
-- `OUTLIER_CAP_MULTIPLIER`: 4x the 90th percentile return
-
----
-
-#### [utils.py](utils.py)
+#### [libs/utils.py](libs/utils.py)
 **Primary Functionality**: Statistical analysis utilities and data visualization helpers
 
 **Role in Project**: Provides reusable utilities for stock price analysis, volatility calculation, and conditional expectation analysis.
@@ -173,6 +155,7 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 **Key Components**:
 - `option_counts_by_date()`: Counts calls vs puts by expiration date
 - `get_stock_closing_prices()`: Fetches historical closing prices from Yahoo Finance
+- `clean_numeric()`: Cleans and converts numeric data from CSV files
 - `Prices` class: Manages historical price data with advanced analytics
   - `attach_returns()`: Calculates N-day backward or forward returns
   - `add_volatility()`: Computes rolling volatility
@@ -187,26 +170,122 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 
 ---
 
-#### [screener.py](screener.py)
-**Primary Functionality**: Stock and options position tracking for individual stocks
+### Tools and Analysis Scripts (tools/)
 
-**Role in Project**: Analyzes trading history for specific stocks to calculate realized and unrealized PnL across different time periods.
+#### [tools/exposure_analysis.py](tools/exposure_analysis.py)
+**Primary Functionality**: Options portfolio risk analysis using Greeks
+
+**Role in Project**: Calculates portfolio delta exposure by computing option deltas using the Black-Scholes model. Helps traders understand their directional risk.
 
 **Key Components**:
-- `StockTrades` class: Tracks all trades for a single stock
-- `read_data()`: Loads trades from CSV with date filtering
-- `infer_positions()`: Reconstructs position size at each historical point
-- `infer_pnl()`: Calculates PnL from any historical point to present
-- `find_pnl_from_zero_pos_after_start_date()`: Identifies round-trip trades (open to close to zero)
-- `compute_forward_pnl()`: Generates time-series of PnL evolution
+- `ExposureAnalysis` class: Main analysis engine
+- `_get_historical_volatility()`: Calculates annualized volatility with outlier capping
+- `_get_option_delta()`: Computes delta using Black-Scholes Greeks (py_vollib library)
+- `analyze_positions()`: Processes entire portfolio and adds delta columns
+- `get_total_exposure()`: Aggregates exposure by underlying ticker
+- Volatility premium adjustment (configurable multiplier)
+- Integration with stock cache for efficient data retrieval
 
-**Dependencies**: pandas
+**Dependencies**: pandas, numpy, yfinance, datetime, libs.positions_data, py_vollib, libs.stock_cache
+
+**Constants**:
+- `VOLATILITY_PREMIUM`: 50% (multiplies historical vol by 1.5)
+- `OUTLIER_CAP_MULTIPLIER`: 4x the 90th percentile return
 
 ---
 
-### Interactive Notebooks
+#### [tools/screener.py](tools/screener.py)
+**Primary Functionality**: Stock screening based on earnings dates and historical returns
 
-#### [pnl-tool.ipynb](pnl-tool.ipynb)
+**Role in Project**: Identifies stocks suitable for options trading by filtering based on earnings calendar proximity and calculating historical returns using cached data for performance.
+
+**Key Components**:
+- `list_stocks()`: Lists all stocks in the earnings database
+- `get_stocks_within_days(N)`: Finds stocks with earnings within N days
+- `get_stocks_outside_days(N)`: Finds stocks with NO earnings within N days
+- `get_stocks_outside_date(end_date_str)`: Finds stocks with NO earnings before specified end date
+- `StockData` class: Manages stock price data with optional caching
+  - `fetch_price_data()`: Retrieves historical prices via HistoricalCache or yfinance
+  - `add_returns(N)`: Calculates N-day returns
+  - `attach_earnings_dates()`: Merges earnings dates with stock data
+- `main()`: Complete screening workflow
+  - Loads symbols from data/stocks_list.csv
+  - Optionally updates earnings database
+  - Screens for stocks outside earnings window
+  - Calculates 5, 22, 66-day returns using HistoricalCache
+  - Sorts by 22-day returns
+  - Saves to data/screener_output.csv
+
+**Parameters**:
+- days_forward (default: 30)
+- update_earnings (default: True)
+- use_cache (default: True)
+- staleness_days (default: 1)
+
+**Output**: data/screener_output.csv with stocks and their historical returns
+
+**Execution**: `python tools/screener.py`
+
+**Dependencies**: pandas, datetime, libs.historical_cache, tools.manage_earnings_database
+
+---
+
+#### [tools/manage_earnings_database.py](tools/manage_earnings_database.py)
+**Primary Functionality**: Earnings calendar database management via Finnhub API
+
+**Role in Project**: Manages the earnings date database by fetching data from Finnhub API and storing it in monthly CSV files. Provides command-line interface for database updates.
+
+**Key Components**:
+- `get_earnings_dates()`: Fetches earnings dates from Finnhub API for given symbols
+- `setup()`: Initializes monthly CSV files (M1.csv - M12.csv) in data/earnings_dates/
+- `store()`: Stores single earnings date to appropriate monthly file
+- `store_symbols()`: Batch stores earnings data with rate limiting (2s delay)
+- `is_valid_symbol()`: Validates symbols (excludes 100+ ETFs, funds, indices like SPY, QQQ, VTI)
+- `get_symbols_needing_update()`: Identifies symbols missing data for specified date range
+- `update_earnings_database()`: Programmatic API for updating earnings data
+- `add_symbol_to_stocks_list()`: Adds symbol to data/stocks_list.csv tracking file
+
+**Command-Line Usage**:
+- `python manage_earnings_database.py --update` (update for next 6 months)
+- `python manage_earnings_database.py --reset` (wipe and rebuild entire database)
+- `python manage_earnings_database.py --add TSLA` (add new symbol to database)
+
+**Storage**: data/earnings_dates/M1.csv through M12.csv (monthly organization)
+
+**API Configuration**: Requires FINNHUB_API_KEY in .env file
+
+**Dependencies**: pandas, finnhub-python, python-dotenv
+
+---
+
+#### [tools/posanalysis.py](tools/posanalysis.py)
+**Primary Functionality**: Current positions analysis aggregated by expiration date
+
+**Role in Project**: Analyzes active positions from broker export, grouping by expiration date to show weekly and monthly summaries of premium collected, unrealized PnL, and margin requirements.
+
+**Key Components**:
+- `main()`: Main analysis function
+  - Reads from data/pos.csv (processed positions file)
+  - Groups positions by expiration date
+  - Creates weekly aggregated DataFrames showing:
+    - Cost Basis (premium collected)
+    - Quantity (number of contracts)
+    - P&L (unrealized profit/loss)
+    - Margin requirements
+  - Aggregates monthly totals
+  - Displays weekly and monthly summaries
+
+**Output**: Weekly and monthly position summaries printed to console with totals
+
+**Execution**: `python tools/posanalysis.py`
+
+**Dependencies**: pandas, libs.positionslib
+
+---
+
+### Interactive Notebooks (notebooks/)
+
+#### [notebooks/pnl-tool.ipynb](notebooks/pnl-tool.ipynb)
 **Primary Functionality**: Monthly PnL analysis and trade statistics
 
 **Role in Project**: Provides an interactive interface for analyzing historical options trading performance by month.
@@ -222,7 +301,7 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 
 ---
 
-#### [pos-analysis.ipynb](pos-analysis.ipynb)
+#### [notebooks/pos-analysis.ipynb](notebooks/pos-analysis.ipynb)
 **Primary Functionality**: Current positions analysis by expiration date
 
 **Role in Project**: Analyzes active positions grouped by expiration date, showing premium collected, unrealized PnL, and margin requirements.
@@ -237,29 +316,124 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 
 ---
 
-#### [screener.ipynb](screener.ipynb)
-**Primary Functionality**: Stock screening based on earnings dates
+#### [notebooks/screener.ipynb](notebooks/screener.ipynb)
+**Primary Functionality**: Stock screening interface based on earnings dates and historical returns
 
-**Role in Project**: Helps identify stocks suitable for options trading by filtering based on earnings calendar proximity.
+**Role in Project**: Interactive interface for identifying stocks suitable for options trading by filtering based on earnings calendar proximity and analyzing historical performance.
 
-**Expected Features** (based on supporting libraries):
-- Filter stocks with earnings outside a date range
-- Display next earnings date for each stock
-- Return-based screening
-- Volatility-based screening
+**Key Features**:
+- Imports screener module functions
+- Interactive workflow for stock screening
+- Calls main() function with configurable parameters:
+  - days_forward: 30 (screens for stocks with no earnings in next N days)
+  - update_earnings: True (refreshes earnings database before screening)
+  - use_cache: True (uses HistoricalCache for fast price data retrieval)
+  - staleness_days: 1 (refreshes cached data older than 1 day)
+- Results automatically saved to data/screener_output.csv
+- Shows stocks with no earnings in specified window
+- Displays historical returns (5, 22, 66-day) for each stock
+- Sorted by 22-day returns for quick identification of trending stocks
 
 ---
 
-#### [stock_pnl_tool.ipynb](stock_pnl_tool.ipynb)
-**Primary Functionality**: Individual stock PnL tracking
+#### [notebooks/stock_pnl_tool.ipynb](notebooks/stock_pnl_tool.ipynb)
+**Primary Functionality**: Individual stock PnL tracking and position evolution analysis
 
-**Role in Project**: Deep-dive analysis of trading performance for specific stocks, tracking position evolution over time.
+**Role in Project**: Deep-dive analysis of trading performance for specific stocks, tracking position evolution over time and identifying round-trip trades.
 
-**Expected Features** (based on supporting libraries):
+**Key Features**:
+- Analyzes specific stock symbols over custom time periods
+- Uses StockTrades class from libs.stocks to reconstruct historical positions
+- Calculates PnL from various start dates (e.g., 01/01/2024, 06/01/2025)
+- Filters out "as of" entries from trade data for accurate calculations
+- Reads from current positions (data/pos.csv) and historical trades
+- Shows PnL evolution from specific start dates to present
+- Handles missing data gracefully with error handling
+- Tracks ~70 symbols including tech stocks, healthcare, energy sectors
+
+**Use Cases**:
 - Historical position reconstruction
-- PnL evolution charts
 - Round-trip trade identification
-- Entry/exit analysis
+- Entry/exit analysis for specific stocks
+- Performance attribution by stock
+
+---
+
+### Test Programs and Examples (temp/)
+
+#### [temp/example_screener_with_cache.py](temp/example_screener_with_cache.py)
+**Primary Functionality**: Example demonstrating HistoricalCache integration with screener
+
+**Role in Project**: Demonstrates the performance benefits of using HistoricalCache (~5000x improvement) and provides example code for integrating the cache into screening workflows.
+
+**Key Features**:
+- Shows how to replace direct API calls with HistoricalCache
+- Example workflow:
+  - Updates cache for test symbols
+  - Calculates 5, 22, 66-day returns
+  - Merges with earnings dates
+  - Displays cache information
+  - Performance benchmarking (measures lookup times)
+- Uses test symbols: AAPL, GOOGL, MSFT, AMZN, META
+- Demonstrates <1ms cached lookup vs ~2s API call performance
+
+**Use Case**: Reference implementation for integrating HistoricalCache into custom tools
+
+---
+
+#### [temp/test_historical_cache.py](temp/test_historical_cache.py)
+**Primary Functionality**: Comprehensive test suite for HistoricalCache class
+
+**Role in Project**: Validates all HistoricalCache functionality and provides usage examples for developers.
+
+**Test Coverage**:
+1. Cache creation with default parameters
+2. Single stock data fetching
+3. Fresh cache lookup performance testing
+4. Custom staleness thresholds (0 days, -1 for never update)
+5. Custom history length (100 days)
+6. Multiple columns (Close, Open, Volume, High, Low)
+7. Batch updates with rate limiting
+8. Mixed fresh/stale detection
+9. Multiple symbol retrieval
+10. Invalid symbol handling
+11. N-day returns calculation
+12. Cached symbols listing
+
+**Test Symbols**: AAPL, GOOGL, MSFT, INVALID_XYZ_123
+
+**Execution**: `python temp/test_historical_cache.py`
+
+---
+
+### Configuration and Scripts
+
+#### .env
+**Purpose**: Environment variables configuration (excluded from git)
+
+**Contents**:
+- FINNHUB_API_KEY: API key for Finnhub earnings data access
+
+**Setup**: Copy from .env.example and add your API key
+
+---
+
+#### .env.example
+**Purpose**: Template for environment configuration
+
+**Contents**: Example format for required environment variables
+
+---
+
+#### [run_exposure.sh](run_exposure.sh)
+**Purpose**: Bash wrapper script for exposure analysis
+
+**Functionality**:
+- Sets correct PYTHONPATH to project root
+- Runs exposure analysis: `python tools/exposure_analysis.py`
+- Ensures module imports work correctly from any directory
+
+**Execution**: `./run_exposure.sh`
 
 ---
 
@@ -269,50 +443,51 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 CSV Files (Broker Exports)
         |
         v
-positionslib.py / positions_data.py
+libs/positionslib.py / libs/positions_data.py
         |
         v
     DataFrame
         |
-        +---> pnllib.py (Trade Matching & PnL Calc)
+        +---> libs/pnllib.py (Trade Matching & PnL Calc)
         |
-        +---> exposure_analysis.py (Greeks & Delta Calc)
+        +---> tools/exposure_analysis.py (Greeks & Delta Calc)
         |           |
         |           v
-        |     stock_cache.py
+        |     libs/stock_cache.py / libs/historical_cache.py
         |           |
         |           v
         |     yfinance API
         |
         v
-Jupyter Notebooks (User Interface)
+Jupyter Notebooks (notebooks/) (User Interface)
 ```
 
 ## Key Workflows
 
 ### 1. PnL Analysis Workflow
 1. Export trades CSV from broker
-2. Load trades using `Trade` class in [pnllib.py](pnllib.py)
+2. Load trades using `Trade` class in [libs/pnllib.py](libs/pnllib.py)
 3. Pair opening and closing trades
 4. Calculate realized PnL
 5. Generate statistics using `compute_trade_stats()`
-6. Visualize in [pnl-tool.ipynb](pnl-tool.ipynb)
+6. Visualize in [notebooks/pnl-tool.ipynb](notebooks/pnl-tool.ipynb)
 
 ### 2. Exposure Analysis Workflow
 1. Export positions CSV from broker
-2. Load positions using `PositionsReader` in [positions_data.py](positions_data.py)
+2. Load positions using `PositionsReader` in [libs/positions_data.py](libs/positions_data.py)
 3. Split into stocks and options
 4. Pre-populate stock cache for all tickers
 5. Calculate option deltas using Black-Scholes
 6. Aggregate exposure by underlying
-7. Display results with [exposure_analysis.py](exposure_analysis.py) main()
+7. Display results with [tools/exposure_analysis.py](tools/exposure_analysis.py) main()
 
 ### 3. Stock Screening Workflow
-1. Populate earnings dates using Finnhub API ([stocks.py](stocks.py))
-2. Filter stocks based on earnings date proximity
-3. Calculate historical returns and volatility
-4. Identify trading candidates
-5. Analyze in [screener.ipynb](screener.ipynb)
+1. Populate earnings dates using Finnhub API ([tools/manage_earnings_database.py](tools/manage_earnings_database.py))
+2. Filter stocks based on earnings date proximity using [tools/screener.py](tools/screener.py)
+3. Use [libs/historical_cache.py](libs/historical_cache.py) for fast historical price data retrieval
+4. Calculate historical returns and volatility
+5. Identify trading candidates
+6. Analyze in [notebooks/screener.ipynb](notebooks/screener.ipynb)
 
 ## External Dependencies
 
@@ -324,19 +499,52 @@ Jupyter Notebooks (User Interface)
 
 ## Configuration Constants
 
-- **VOLATILITY_PREMIUM** (exposure_analysis.py): 50% (multiplies historical volatility by 1.5)
-- **OUTLIER_CAP_MULTIPLIER** (exposure_analysis.py): 4 (caps returns at 4x the 90th percentile)
-- **Cache Interval** (stock_cache.py): 6 hours
-- **Volatility Lookback** (exposure_analysis.py): 252 trading days (1 year)
+- **VOLATILITY_PREMIUM** (tools/exposure_analysis.py): 50% (multiplies historical volatility by 1.5)
+- **OUTLIER_CAP_MULTIPLIER** (tools/exposure_analysis.py): 4 (caps returns at 4x the 90th percentile)
+- **Cache Interval** (libs/stock_cache.py): 6 hours
+- **Staleness Days** (libs/historical_cache.py): 1 day (default)
+- **History Days** (libs/historical_cache.py): 252 trading days (1 year)
+- **Volatility Lookback** (tools/exposure_analysis.py): 252 trading days (1 year)
 
 ## Data Storage
 
 - **positions.csv / pos.csv**: Current positions exported from broker
 - **all.csv**: Historical trades exported from broker
-- **earnings_dates/M1.csv - M12.csv**: Monthly earnings calendar data
-- **data/stock_cache.json**: Cached stock market data
+- **data/earnings_dates/M1.csv - M12.csv**: Monthly earnings calendar data
+- **data/stock_cache.json**: Cached stock market data (current prices, volatility)
+- **data/historical_cache/{SYMBOL}.json**: Per-stock historical price cache
 - **data/pos.csv**: Processed positions data
+
+## Directory Structure
+
+```
+optionspnl/
+├── libs/                      # Core library modules
+│   ├── pnllib.py             # Trade matching and PnL calculation
+│   ├── positionslib.py       # Position file parsing
+│   ├── positions_data.py     # Object-oriented positions interface
+│   ├── stocks.py             # Earnings date management
+│   ├── stock_cache.py        # Current stock data cache
+│   ├── historical_cache.py   # Historical price data cache
+│   └── utils.py              # Statistical utilities
+├── tools/                     # Executable scripts
+│   ├── screener.py           # Stock screening tool
+│   ├── exposure_analysis.py  # Portfolio Greeks analysis
+│   └── manage_earnings_database.py  # Earnings database management
+├── notebooks/                 # Jupyter notebooks
+│   ├── pnl-tool.ipynb        # Monthly PnL analysis
+│   ├── pos-analysis.ipynb    # Current positions analysis
+│   ├── screener.ipynb        # Stock screening interface
+│   └── stock_pnl_tool.ipynb  # Individual stock PnL tracking
+├── data/                      # Data storage
+│   ├── stock_cache.json      # Stock cache
+│   ├── historical_cache/     # Historical price cache
+│   └── earnings_dates/       # Earnings calendar data
+├── temp/                      # Throwaway test programs
+└── docs/                      # Documentation
+    └── codebase_structure.md # This file
+```
 
 ---
 
-This codebase represents a comprehensive options trading analysis platform with strengths in automated trade matching, exposure calculation, and integration with real-time market data. The modular design allows for easy extension and maintenance of individual components.
+This codebase represents a comprehensive options trading analysis platform with strengths in automated trade matching, exposure calculation, and integration with real-time market data. The modular design with clear separation between libraries (`libs/`), tools (`tools/`), and notebooks (`notebooks/`) allows for easy extension and maintenance of individual components.
