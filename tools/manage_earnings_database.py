@@ -25,7 +25,19 @@ import time
 import pandas as pd
 import finnhub
 import os
+import sys
 from dotenv import load_dotenv
+
+# Add project root to Python path to enable imports
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Helper function to get data directory path
+def _get_data_path(*parts):
+    """Get absolute path to data directory or subdirectory."""
+    return os.path.join(project_root, 'data', *parts)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -122,10 +134,10 @@ def setup():
     Creates files data/earnings_dates/M1.csv through data/earnings_dates/M12.csv
     """
     # Create directory if it doesn't exist
-    os.makedirs('data/earnings_dates', exist_ok=True)
+    os.makedirs(_get_data_path('earnings_dates'), exist_ok=True)
 
     for i in range(1, 13):
-        filename = f"data/earnings_dates/M{i}.csv"
+        filename = _get_data_path('earnings_dates', f'M{i}.csv')
         with open(filename, "w") as h:
             h.write("symbol, date\n")
         print(f"Initialized {filename}")
@@ -141,7 +153,7 @@ def store(symbol, dt):
     """
     # Extract month from date (assumes format YYYY-MM-DD)
     m = int(dt[-5:-3])
-    fname = f"data/earnings_dates/M{m}.csv"
+    fname = _get_data_path('earnings_dates', f'M{m}.csv')
     print(f"{fname}: {symbol}, {dt}")
 
     with open(fname, "a") as h:
@@ -239,7 +251,7 @@ def get_symbols_needing_update(symbols, start_date, end_date):
     # Load all earnings data
     all_earnings = {}
     for i in range(1, 13):
-        filename = f'data/earnings_dates/M{i}.csv'
+        filename = _get_data_path('earnings_dates', f'M{i}.csv')
         if os.path.exists(filename):
             try:
                 df = pd.read_csv(filename, skipinitialspace=True)

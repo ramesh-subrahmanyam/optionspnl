@@ -7,7 +7,21 @@ import io
 from contextlib import redirect_stdout
 import logging
 import yfinance as yf
-from historical_cache import HistoricalCache
+import os
+
+# Add project root to Python path to enable imports
+# This works whether running from project root or tools directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from libs.historical_cache import HistoricalCache
+
+# Helper function to get data directory path
+def _get_data_path(*parts):
+    """Get absolute path to data directory or subdirectory."""
+    return os.path.join(project_root, 'data', *parts)
 
 
 
@@ -20,7 +34,7 @@ def list_stocks():
 
     # Loop through the files labeled M1 to M12
     for i in range(1, 13):
-        file_name = f'data/earnings_dates/M{i}.csv'
+        file_name = _get_data_path('earnings_dates', f'M{i}.csv')
         try:
             df = pd.read_csv(file_name, skipinitialspace=True)
             if len(df) == 0: continue
@@ -40,7 +54,7 @@ def get_stocks_within_days(N):
 
     # Loop through the files labeled M1 to M12
     for i in range(1, 13):
-        file_name = f'data/earnings_dates/M{i}.csv'
+        file_name = _get_data_path('earnings_dates', f'M{i}.csv')
         try:
             df = pd.read_csv(file_name, skipinitialspace=True)
             if len(df) == 0: continue
@@ -64,7 +78,7 @@ def get_stocks_outside_days(N):
 
     # Loop through the files labeled M1 to M12
     for i in range(1, 13):
-        file_name = f'data/earnings_dates/M{i}.csv'
+        file_name = _get_data_path('earnings_dates', f'M{i}.csv')
         try:
             df = pd.read_csv(file_name, skipinitialspace=True)
             if len(df) == 0: continue
@@ -107,7 +121,7 @@ def get_stocks_outside_date(end_date_str):
 
     # Loop through the files labeled M1 to M12
     for i in range(1, 13):
-        file_name = f'data/earnings_dates/M{i}.csv'
+        file_name = _get_data_path('earnings_dates', f'M{i}.csv')
         try:
             df = pd.read_csv(file_name, skipinitialspace=True)
             if len(df) == 0: continue
@@ -244,8 +258,8 @@ class StockData:
         self.df["earnings_date"]=pd.to_datetime(earnings_dates.set_index("symbol").earnings_date).dt.date
 
 
-def main(days_forward=30, update_earnings=True, output_file='data/screener_output.csv',
-         stocks_list_file='data/stocks_list.csv', use_cache=True, staleness_days=1):
+def main(days_forward=30, update_earnings=True, output_file=None,
+         stocks_list_file=None, use_cache=True, staleness_days=1):
     """
     Main screening workflow function.
 
@@ -260,6 +274,12 @@ def main(days_forward=30, update_earnings=True, output_file='data/screener_outpu
     Returns:
         pd.DataFrame: Screening results sorted by 22-day returns
     """
+    # Set default paths relative to project root
+    if output_file is None:
+        output_file = _get_data_path('screener_output.csv')
+    if stocks_list_file is None:
+        stocks_list_file = _get_data_path('stocks_list.csv')
+
     # Step 1: Load symbols from stocks_list.csv
     with open(stocks_list_file, 'r') as f:
         symbols = [line.strip() for line in f.readlines() if line.strip()]
@@ -268,7 +288,7 @@ def main(days_forward=30, update_earnings=True, output_file='data/screener_outpu
 
     # Step 2: Update earnings database (optional)
     if update_earnings:
-        from manage_earnings_database import update_earnings_database
+        from tools.manage_earnings_database import update_earnings_database
         print("\nUpdating earnings database...")
         update_earnings_database(symbols)
 

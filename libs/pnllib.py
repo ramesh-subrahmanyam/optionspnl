@@ -3,7 +3,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import itertools
-from utils import get_stock_closing_prices
+from libs.utils import get_stock_closing_prices
 import yfinance as yf
 
 INFO=3

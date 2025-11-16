@@ -3,9 +3,19 @@ import numpy as np
 import yfinance as yf
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
-from positions_data import OptionsData
+import sys
+import os
+
+# Add project root to Python path to enable imports
+# This works whether running from project root or tools directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from libs.positions_data import OptionsData
 from py_vollib.black_scholes.greeks.analytical import delta
-from stock_cache import StockCache
+from libs.stock_cache import StockCache
 
 # Trading and option constants
 TRADING_DAYS_PER_YEAR = 252  # Standard trading days in a year
@@ -17,6 +27,10 @@ VOLATILITY_PREMIUM = 50
 # Outlier capping constant for volatility calculation
 # Cap outliers at K times the 90th percentile to reduce distortion from extreme returns
 OUTLIER_CAP_MULTIPLIER = 4
+
+# Maximum exposure threshold in dollars
+# Used to calculate hedge needed to bring exposure within this limit
+MAX_EXPOSURE = 5000
 
 class ExposureAnalysis:
     """
@@ -277,7 +291,7 @@ def _read_and_filter_positions(file_path: str):
     Returns:
         Tuple of (options_df, stocks_df, analyzer)
     """
-    from positions_data import PositionsReader, StockData, OptionsData
+    from libs.positions_data import PositionsReader, StockData, OptionsData
 
     # Read the raw positions data
     positions_df = PositionsReader.read_positions_file(file_path)
@@ -362,6 +376,17 @@ def _create_exposure_summary(analyzer, options_analysis, stocks_analysis):
         # Calculate net exposure
         net_exposure = stock_exposure + options_exposure
 
+        # Calculate hedge needed (in shares) to bring exposure within MAX_EXPOSURE
+        # If abs(net_exposure) > MAX_EXPOSURE, we need to hedge the excess
+        # hedge_needed is negative if we need to short, positive if we need to buy
+        if abs(net_exposure) > MAX_EXPOSURE and stock_price and stock_price > 0:
+            # Target exposure sign matches current exposure but with magnitude = MAX_EXPOSURE
+            target_exposure = MAX_EXPOSURE if net_exposure > 0 else -MAX_EXPOSURE
+            excess_exposure = net_exposure - target_exposure
+            hedge_needed = -excess_exposure / stock_price  # Negative sign because we hedge opposite to exposure
+        else:
+            hedge_needed = 0
+
         # Update totals
         total_options_delta += options_delta
         total_stock_delta += stock_delta
@@ -381,7 +406,8 @@ def _create_exposure_summary(analyzer, options_analysis, stocks_analysis):
                 'days_to_expiry': days_str,
                 'options_exposure': options_exposure,
                 'stock_exposure': stock_exposure,
-                'net_exposure': net_exposure
+                'net_exposure': net_exposure,
+                'hedge_needed': hedge_needed
             })
 
     # Add summary row at the top
@@ -395,7 +421,8 @@ def _create_exposure_summary(analyzer, options_analysis, stocks_analysis):
         'days_to_expiry': None,
         'options_exposure': total_options_exposure,
         'stock_exposure': total_stock_exposure,
-        'net_exposure': total_net_exposure
+        'net_exposure': total_net_exposure,
+        'hedge_needed': None  # Not applicable for total
     })
 
     # Create DataFrame and sort by absolute value of net exposure (keep TOTAL at top)
@@ -407,12 +434,13 @@ def _create_exposure_summary(analyzer, options_analysis, stocks_analysis):
     return summary_df
 
 
-def _display_results(summary_df):
+def _display_results(summary_df, output_file='data/exposure.csv'):
     """
-    Display formatted exposure analysis results.
+    Display formatted exposure analysis results and save to CSV.
 
     Args:
         summary_df: Exposure summary DataFrame
+        output_file: Path to save the CSV file (default: 'data/exposure.csv')
     """
     # Format display
     pd.set_option('display.float_format', lambda x: '{:,.2f}'.format(x))
@@ -421,6 +449,10 @@ def _display_results(summary_df):
 
     print("\nExposure Analysis Summary (sorted by net exposure):")
     print(summary_df.to_string(index=False))
+
+    # Save to CSV
+    summary_df.to_csv(output_file, index=False)
+    print(f"\nResults saved to: {output_file}")
 
 
 def main():
