@@ -1,6 +1,15 @@
 import pandas as pd
-import pnllib
-from utils import clean_numeric
+import os
+import libs.pnllib as pnllib
+from libs.utils import clean_numeric
+
+# Get project root directory (parent of libs directory)
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_LIB_DIR)
+
+def _get_project_path(*parts):
+    """Get absolute path relative to project root."""
+    return os.path.join(_PROJECT_ROOT, *parts)
 
 COLUMNS=['Symbol', 'Description', 'Quantity', 'Price', 'Price Change %',
        'Price Change $', 'Market Value', 'Day Change %', 'Day Change $',
@@ -15,10 +24,16 @@ def get_margin(x):
 
 
 def skip_lines(in_filename, out_filename, needed_columns=None):
+    # Convert relative paths to absolute paths
+    if not os.path.isabs(in_filename):
+        in_filename = _get_project_path(in_filename)
+    if not os.path.isabs(out_filename):
+        out_filename = _get_project_path(out_filename)
+
     h=open(out_filename, "w") # create an output file
     #convert this code into one that only saves specific columns to a csv file
     #read the first line in the input file
-    
+
     lines=[]
     columns=COLUMNS
     with open(in_filename) as file:
@@ -55,6 +70,9 @@ def skip_lines(in_filename, out_filename, needed_columns=None):
 def read_positions_file(in_filename, needed_columns=None):
     out_filename="data/pos_temp.csv"
     skip_lines(in_filename, out_filename, needed_columns)
+    # Convert relative path to absolute for reading
+    if not os.path.isabs(out_filename):
+        out_filename = _get_project_path(out_filename)
     df=pd.read_csv(out_filename, delimiter=",")
     if needed_columns:
         df=df.loc[:,needed_columns]
