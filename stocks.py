@@ -55,32 +55,6 @@ class StockTrades:
         except Exception as e:
             print(f"Error reading data: {e}")
     
-    def DEL_find_indices(self, current_pos):
-        if self.df is None:
-            print("No data available. Please call read_data method first.")
-            return []
-
-        pos = 0
-        result_indices = []
-        positions = []
-        for index, row in self.df.iterrows():
-            pos += row['qty']
-            positions.append(pos)
-            if pos == current_pos:
-                result_indices.append(index)
-        return result_indices, positions
-
-    def DEL_find_pnl(self, current_pos, current_price):
-        out = []
-        ixs, _ = self.find_indices(current_pos)
-        for i in ixs:
-            # print(self.df.date.iloc[i], self.df.date.iloc[0], i, 
-            #             self.df.qty.iloc[:i+1].sum(),
-            #             self.df.amount.iloc[:i+1].sum()+current_pos*current_price)
-            out.append((self.df.date.iloc[i], 
-                        self.df.amount.iloc[:i+1].sum()+current_pos*current_price))  
-        return dict(out), self.df.date.iloc[0]
-
     def infer_positions(self, current_pos):
         """
         Infers the position at each row of the DataFrame based on the current position.

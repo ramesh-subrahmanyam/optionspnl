@@ -3,6 +3,32 @@ import pandas as pd
 from functools import partial
 import yfinance as yf
 
+# Constants
+TRADING_DAYS_PER_YEAR = 252  # Standard trading days in a year
+
+def clean_numeric(value):
+    """
+    Clean numeric values from various formats (currency, percentages, etc.).
+
+    Args:
+        value: The value to clean (can be string, int, float, or None)
+
+    Returns:
+        float: The cleaned numeric value, or 0.0 if conversion fails
+    """
+    if pd.isna(value) or value == '':
+        return 0.0
+
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    # Remove $, %, and commas
+    value = str(value).replace('$', '').replace('%', '').replace(',', '')
+    try:
+        return float(value)
+    except ValueError:
+        return 0.0
+
 def option_counts_by_date(dct):
     """
     dct is a map from expiration dates to a dataframe with a
@@ -66,13 +92,13 @@ class Prices:
         if N > 0:
             self.data[f'{N}DayReturn'] = self.data['Close'].pct_change(N) * 100
         else:
-            self.data[f'%dDayFwdReturn'%(-N)] = self.data['Close'].pct_change(N) * -100
+            self.data[f'{abs(N)}DayFwdReturn'] = self.data['Close'].pct_change(N) * -100
             
     def add_volatility(self, N):
         # Ensure the DataFrame has the necessary columns
-        
+
         # Calculate volatility based on the last N days of 1-day returns
-        self.data[f'Volatility'] = self.data['Close'].pct_change().rolling(window=N).apply(lambda x: (x*x).mean()**0.5, raw=True)* 100*np.sqrt(252)
+        self.data[f'Volatility'] = self.data['Close'].pct_change().rolling(window=N).apply(lambda x: (x*x).mean()**0.5, raw=True)* 100*np.sqrt(TRADING_DAYS_PER_YEAR)
         
     def add_vix(self):
         # Fetch historical VIX data

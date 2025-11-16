@@ -13,6 +13,10 @@ SILENT=0
 
 LOG_LEVEL=ERROR
 
+# Trading and option constants
+OPTION_CONTRACT_MULTIPLIER = 100  # Standard option contract multiplier
+TRADING_DAYS_PER_YEAR = 252       # Standard trading days in a year
+
 def set_log_level(level):
     """
     Set the log level to the specified level.
@@ -25,37 +29,48 @@ def set_log_level(level):
     """
     global LOG_LEVEL
     LOG_LEVEL=level
-    
-def log_info(*msg): 
+
+def _log(level, *msg):
     """
-    A function that checks the log level and prints the messages if the log level is INFO or higher.
-    
+    Internal logging function that checks the log level and prints messages.
+
     Parameters:
+    level (int): The log level for this message.
     *msg: The messages to be logged.
     """
     global LOG_LEVEL
-    if LOG_LEVEL >= INFO: print(*msg)
+    if LOG_LEVEL >= level:
+        print(*msg)
+
+def log_info(*msg):
+    """
+    Log an info message if the log level is INFO or higher.
+
+    Parameters:
+    *msg: The messages to be logged.
+    """
+    _log(INFO, *msg)
 
 def log_warn(*msg):
     """
-    logs a warning message if the log level is set to WARN or higher
+    Log a warning message if the log level is WARN or higher.
+
+    Parameters:
+    *msg: The messages to be logged.
     """
-    global LOG_LEVEL
-    if LOG_LEVEL >= WARN: print(*msg)
+    _log(WARN, *msg)
 
 def log_error(*msg):
     """
-    A function that logs an error message if the global log level is set to ERROR or higher.
-    
+    Log an error message if the log level is ERROR or higher.
+
     Parameters:
-    *msg : tuple
-        Variable length argument list of messages to log.
-    
+    *msg: Variable length argument list of messages to log.
+
     Returns:
     None
     """
-    global LOG_LEVEL
-    if LOG_LEVEL >= ERROR: print(*msg)
+    _log(ERROR, *msg)
 
     
 def parse_option(option_str):
@@ -196,8 +211,8 @@ def get_assigned_prices(symbol, dates):
     yf_dates = [pd.to_datetime(date, format='%m-%d-%Y').strftime('%Y-%m-%d') for date in dates]
 
     # Download historical data
-    start_date=start_date = (pd.to_datetime(min(yf_dates)) - pd.DateOffset(5)).strftime('%Y-%m-%d')
-    end_date=(pd.to_datetime(max(yf_dates)) + pd.DateOffset(5)).strftime('%Y-%m-%d')
+    start_date = (pd.to_datetime(min(yf_dates)) - pd.DateOffset(5)).strftime('%Y-%m-%d')
+    end_date = (pd.to_datetime(max(yf_dates)) + pd.DateOffset(5)).strftime('%Y-%m-%d')
     
     stock_data = yf.download(symbol, start=start_date, end=end_date, progress=False, auto_adjust=False)
     stock_data.columns = stock_data.columns.droplevel(1)
@@ -266,7 +281,7 @@ class Trade:
         for i, sym in enumerate(self.df.Symbol):
             if type(sym) != str:
                 log_error(i, sym, self.df.iloc[i])
-                xx
+                raise ValueError(f"Invalid symbol type at index {i}: {sym}")
         
         if symbol is not None:
             df = self.df[self.df['Symbol'].str.startswith(symbol + " ")] #option symbols only
@@ -584,9 +599,9 @@ def calculate_option_pnl(open_trade, close_trade):
 
     open_price = open_trade['Price']
     close_price=close_trade["Price"]
-    
-    pnl = qty * (close_price - open_price) * 100
-    
+
+    pnl = qty * (close_price - open_price) * OPTION_CONTRACT_MULTIPLIER
+
     return pnl
 
 
@@ -653,7 +668,7 @@ def summarize_options_data(df, frequency='weekly'):
     df['Price'] = pd.to_numeric(df['Price'].replace('[$,]', '', regex=True))
 
     # Calculate option premium collected
-    df['Premium Collected'] = df['Quantity'] * df['Price'] * 100
+    df['Premium Collected'] = df['Quantity'] * df['Price'] * OPTION_CONTRACT_MULTIPLIER
 
     # Group by date and type (puts or calls)
     if frequency == 'weekly':

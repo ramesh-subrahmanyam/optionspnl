@@ -1,5 +1,6 @@
 import pandas as pd
 import pnllib
+from utils import clean_numeric
 
 COLUMNS=['Symbol', 'Description', 'Quantity', 'Price', 'Price Change %',
        'Price Change $', 'Market Value', 'Day Change %', 'Day Change $',
@@ -8,11 +9,9 @@ COLUMNS=['Symbol', 'Description', 'Quantity', 'Price', 'Price Change %',
        'Security Type', 'Margin Requirement']
 
 def get_margin(x):
+    """Extract margin percentage from margin requirement string."""
     y=x.split(" ")[-1][:-1]
-    try:
-        return float(y)
-    except:
-        return 0.0
+    return clean_numeric(y)
 
 
 def skip_lines(in_filename, out_filename, needed_columns=None):

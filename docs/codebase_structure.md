@@ -112,6 +112,37 @@ This is an **Options Trading Analysis System** designed to analyze options tradi
 
 ---
 
+#### [historical_cache.py](historical_cache.py)
+**Primary Functionality**: High-performance caching of historical stock price data
+
+**Role in Project**: Provides ~5000x faster access to historical price data compared to direct API calls. Designed for stock screening and backtesting workflows. Each stock's data is stored in a separate JSON file for efficient lazy updates.
+
+**Key Components**:
+- `HistoricalCache` class: Main cache management interface with configurable staleness and history
+- `update()`: Updates cache for a single symbol from Yahoo Finance
+- `update_batch()`: Updates multiple symbols with automatic rate limiting
+- `lookup()`: Retrieves historical DataFrame with auto-refresh if stale
+- `get_multiple()`: Efficiently retrieves data for multiple symbols
+- `needs_update()`: Checks staleness based on days and column changes
+- `get_cache_info()`: Returns metadata about cached symbol
+- Configurable parameters: staleness_days (default: 1), history_days (default: 252), columns (default: ['Close'])
+
+**Use Cases**:
+- Daily stock screening with automatic cache refresh
+- Backtesting with frozen historical data (staleness_days=-1)
+- Technical analysis with OHLCV data
+- Calculating N-day returns efficiently
+
+**Storage**: Per-stock JSON files in `data/historical_cache/{SYMBOL}.json`
+
+**Performance**: <1ms lookup for cached data, ~50KB per stock for 252 days of Close data
+
+**Dependencies**: yfinance, pandas, json, datetime
+
+**Documentation**: [docs/historical_cache.md](historical_cache.md) | [Quick Start](historical_cache_quickstart.md)
+
+---
+
 #### [exposure_analysis.py](exposure_analysis.py)
 **Primary Functionality**: Options portfolio risk analysis using Greeks
 
