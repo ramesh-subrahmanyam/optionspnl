@@ -3,6 +3,24 @@ import pandas as pd
 from functools import partial
 import yfinance as yf
 
+def option_counts_by_date(dct):
+    """
+    dct is a map from expiration dates to a dataframe with a
+    column Symbol that conatins sthe option symbol
+    """
+    out=[]
+    for dt, s in dct.items():
+        calls=puts=0
+        for o in list(s.Symbol):
+            u, d, s, t=o.split(' ')
+            if t=="C":
+                calls+=1
+            else:
+                puts +=1
+        out.append((dt, calls, puts))
+    df=pd.DataFrame(out, columns=["exp_date", "calls", "puts"]).set_index("exp_date")
+    return df.sort_index()
+    
 
 def get_stock_closing_prices(symbol, dates):
     """
