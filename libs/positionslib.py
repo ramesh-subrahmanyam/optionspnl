@@ -53,7 +53,7 @@ def skip_lines(in_filename, out_filename, needed_columns=None):
     return lines
 
 def read_positions_file(in_filename, needed_columns=None):
-    out_filename="pos.csv"
+    out_filename="data/pos_temp.csv"
     skip_lines(in_filename, out_filename, needed_columns)
     df=pd.read_csv(out_filename, delimiter=",")
     if needed_columns:
