@@ -21,27 +21,28 @@ def skip_lines(in_filename, out_filename, needed_columns=None):
     #read the first line in the input file
     
     lines=[]
+    columns=COLUMNS
     with open(in_filename) as file:
         for line in file:
     
             if line.startswith("\"Symbol"):
                 line=line.replace('"', '').strip()
-                columns=line.split(",")
+                columns=[x for x in line.split(",") if len(x)>0]
                 break
         for line in file:
             if line.startswith("\"Cash & Cash Investments"): break
             line=line[1:-1].replace("$", "").strip().split('","')
             
             lines.append(line)
-                         
-    df=pd.DataFrame(lines, columns=COLUMNS)
-    df["Margin"]=df["Margin Requirement"].apply(get_margin)
-    for col in ["Cost Basis", "Gain/Loss $", "Quantity"]:
+    df=pd.DataFrame(lines, columns=columns)
+    #print(df.head(2))
+    df["Margin"]=df["Margin Req (Margin Requirement)"].apply(get_margin)
+    for col in ["Cost Basis", "Gain $ (Gain/Loss $)", "Qty (Quantity)"]:
         df[col]=df[col].str.replace("N/A","0").str.replace(",","")
     
 
-    df["PnL"]=df["Gain/Loss $"].astype(float)
-    df["Quantity"]=df["Quantity"].astype(float).astype(int)
+    df["PnL"]=pd.to_numeric(df["Gain $ (Gain/Loss $)"], errors='coerce').fillna(0)
+    df["Quantity"]=pd.to_numeric(df["Qty (Quantity)"], errors='coerce').fillna(0).astype(int)
     print("Total margin", int(df.Margin.sum()))
     
     if needed_columns:
@@ -62,8 +63,9 @@ def read_positions_file(in_filename, needed_columns=None):
     # Quantity should be an int and Cost Basis shoulkd be a float; Remove the $ sign from Cost Basis and convert to float.  
     # The $ sign could be after a minus sign
     # df["Cost Basis"]=df["Cost Basis"].str.replace("$", "").str.replace("-","-0").astype(float)
-    df["Cost Basis"]=df["Cost Basis"].astype(float)
-    df["PnL"]=df["PnL"].astype(float)
+    df["Cost Basis"]=pd.to_numeric(df["Cost Basis"], errors='coerce').fillna(0)
+
+    df["PnL"]=pd.to_numeric(df["PnL"], errors='coerce').fillna(0)
     df["Quantity"]=df["Quantity"].astype(float).astype(int)
     df=df.sort_values(by=['Symbol'])
     return df

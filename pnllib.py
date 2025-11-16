@@ -154,6 +154,7 @@ def read_trades_file(filename):
     df=df[df.Action.isin(actions)]
     df=df[df['Symbol'].apply(is_option)].copy()
     symbols=set(df['Symbol'].str.extract(r'([A-Z]+)', expand=False))
+    df["Quantity"]=df["Quantity"].astype(int)
     return df, symbols
 
     
@@ -198,11 +199,10 @@ def get_assigned_prices(symbol, dates):
     start_date=start_date = (pd.to_datetime(min(yf_dates)) - pd.DateOffset(5)).strftime('%Y-%m-%d')
     end_date=(pd.to_datetime(max(yf_dates)) + pd.DateOffset(5)).strftime('%Y-%m-%d')
     
-    stock_data = yf.download(symbol, start=start_date, end=end_date, progress=False)
-
+    stock_data = yf.download(symbol, start=start_date, end=end_date, progress=False, auto_adjust=False)
+    stock_data.columns = stock_data.columns.droplevel(1)
     # Create a dictionary with original dates
     previous_close_prices_dict = {}
-
     for date in dates:
         formatted_date = pd.to_datetime(date, format='%m-%d-%Y').strftime('%Y-%m-%d')
 
@@ -214,7 +214,6 @@ def get_assigned_prices(symbol, dates):
             previous_close_prices_dict[date] = previous_close_price
         else:
             previous_close_prices_dict[date] = None
-
     return previous_close_prices_dict
 
 class Trade:
@@ -320,7 +319,7 @@ class Trade:
         mtrades = []
 
         # Initialize DataFrame to store unmatched trades
-        unmatched_df = pd.DataFrame()
+        all_unmatched_df = pd.DataFrame()
 
         # Loop over each symbol in self.symbols or the provided symbol
         if symbol is None:
@@ -343,16 +342,17 @@ class Trade:
            
 
             # Pair option trades and get unmatched trades
-            matched_df, unmatched_df_, matched_trades = pair_option_trades(option_trades)
+            matched_df, unmatched_df, matched_trades = pair_option_trades(option_trades)
       
-          
+            unmatched_df=filter_unexpired_trades(unmatched_df)
 
             # Concatenate unmatched trades with the existing unmatched DataFrame
-            if len(unmatched_df_) > 0:
-                log_error(symbol, "Matched:", len(matched_df), "unmatched:", len(unmatched_df_), "total:", len(option_trades))
-                # print("UNMATCHED", symbol, unmatched_df)
+            if len(unmatched_df) > 0:
+                log_error(symbol, "Matched:", len(matched_df), "unmatched:", len(unmatched_df), 
+                "total:", len(option_trades))
                 # print(unmatched_df_)
-                unmatched_df = pd.concat([unmatched_df, unmatched_df_], axis=0)
+                all_unmatched_df = pd.concat([all_unmatched_df, unmatched_df], axis=0)
+                print("UNMATCHED", symbol, unmatched_df)
                 # print(unmatched_df_.columns)
             # Loop over matched trades
             for open_t, close_t in matched_trades:
@@ -373,14 +373,22 @@ class Trade:
                                                     "close_date", "close_action", "close_price", "pnl"])
 
         # Return the P&L dictionary, matched trades DataFrame, and unmatched trades DataFrame
-        return pnl_dict, mtrades_df, unmatched_df
+        return pnl_dict, mtrades_df, all_unmatched_df
 
 
     def show_option_trades(self, symbol, exp_month, exp_year, opt_type=""):
         _, mtrades_df, unmatched_df=self.compute_option_pnls(exp_month, exp_year, symbol=symbol, opt_type=opt_type)
         display(mtrades_df)
 
-
+def filter_unexpired_trades(unmatched_df):
+    if len(unmatched_df) == 0: return unmatched_df
+    exp=pd.to_datetime(unmatched_df.Symbol.apply(lambda x: parse_option(x)[1]), format='%m/%d/%Y')
+    
+    live=exp > datetime.datetime.today()-datetime.timedelta(days=3) 
+    # we might be running this on a Sunday
+    # don't want expired trades from Friday to cause unmatched trades
+    
+    return unmatched_df[~live]
 
 def pair_option_trades(trades_df):
     """
@@ -411,7 +419,10 @@ def pair_option_trades(trades_df):
     trades = []
     for t in list(trades_df.iterrows()):
         t_=t[1].copy()
-        qty=int(t_['Quantity'])
+        if t_['Quantity'] == '':
+            t_['Quantity']=0
+        t_['Quantity']=qty=int(t_['Quantity'])
+        #t_['Quantity']=qty
         if qty > 1:
             for i in range(qty):
                 t_['Quantity']=1
@@ -428,20 +439,25 @@ def pair_option_trades(trades_df):
     for trade in trades:
         symbol = trade['Symbol']
         action = trade['Action']
-        quantity = trade['Quantity']
-        
+        quantity = int(trade['Quantity'])
+
         # Check if trade is a buy or sell to open trade
         if 'Open' in action:
             # Add trade to appropriate open trades dictionary
             if quantity > 0:
                 buy_open_trades.setdefault(symbol, [])
                 buy_open_trades[symbol].append(trade)
-                # print(trade)
+                #print(trade)
             else:
                 sell_open_trades.setdefault(symbol, [])
                 sell_open_trades[symbol].append(trade)
+    for trade in trades:
+        symbol = trade['Symbol']
+        action = trade['Action']
+        quantity = int(trade['Quantity'])
+            
         # Check if trade is a sell or buy to close trade
-        elif 'Close' in action:
+        if 'Close' in action:
             # Determine whether this is a sell to close or buy to close trade
             if quantity > 0:
                 closing_trade = trade
@@ -456,6 +472,8 @@ def pair_option_trades(trades_df):
             for ii, opening_trade in enumerate(opening_trades.get(symbol,[])):
                 if opening_trade['Quantity'] == -closing_trade['Quantity']:
                     opened_trade = opening_trade
+                    # print("closing:", trade)
+                    # print(opening_trade)
                     break
                 
             if opened_trade is None:
